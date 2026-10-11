@@ -80,7 +80,8 @@ in `ci.yml`. Rules: `../craftrules/standards/fonts.md`; build option: `docs/deve
   takes over Preview's defaults). The icon is `assets/app-icon/photocraft.icns`.
 - **Signing** goes inside-out with the hardened runtime and a secure timestamp. The executable
   is signed first, then the bundle. There's no `--deep` on the final signature. The
-  entitlements (`entitlements.plist`) are deliberately empty.
+  entitlements (`entitlements.plist`) are deliberately empty. Copied resource attributes are
+  cleared before signing; staging uses `ditto --norsrc --noextattr` to avoid reintroducing them.
 - **Notarization:** the app is zipped and sent with `xcrun notarytool submit --wait`, then the
   ticket is stapled to the app. The app goes on a DMG (`hdiutil`, with an `Applications` link
   to drag onto). The DMG is signed, notarized and stapled too. The script checks the results
@@ -98,7 +99,10 @@ in `ci.yml`. Rules: `../craftrules/standards/fonts.md`; build option: `docs/deve
   architectures, the hardened runtime flag, a `Developer ID Application` authority from
   `APPLE_TEAM_ID`, a timestamp, and `spctl --assess --type install` reporting
   `source=Notarized Developer ID` (the same online lookup Gatekeeper does). For the DMG it runs
-  `codesign --verify`, `stapler validate` and `spctl --type open`. The release workflow runs it
+  `codesign --verify`, `stapler validate` and `spctl --type open`. It also mounts the final DMG
+  read-only and requires `codesign --verify --strict --deep` on `PhotoCraft.app` inside,
+  even for ad-hoc builds. With signing secrets it verifies the app's stapled ticket and
+  Gatekeeper acceptance too. The image is detached on success or failure. The release workflow runs it
   as its own step after packaging. With signing secrets it fails the job on any miss; without
   them it only checks signature integrity and warns, like `package.sh`. Run it locally after a
   build: `packaging/macos/verify.sh --arch aarch64`.

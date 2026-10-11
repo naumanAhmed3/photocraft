@@ -114,6 +114,10 @@ sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHORT_VERSION@/$SHORT_VERSION/g" \
 plutil -lint "$APP/Contents/Info.plist"
 printf 'APPL????' >"$APP/Contents/PkgInfo"
 
+# Copied icons/licences can carry FinderInfo or resource forks that codesign rejects.
+# Clear them before signing; never strip attributes from the stapled, signed bundle.
+xattr -cr "$APP"
+
 # Sign inside-out: nested code first, then the bundle itself (no --deep on the final signature).
 # Today the only nested code is the main executable; frameworks/helpers would be signed here too.
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/PhotoCraft"
@@ -132,7 +136,8 @@ fi
 echo "==> building $DMG"
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
-ditto "$APP" "$STAGE/PhotoCraft.app"
+# Do not reintroduce FinderInfo/resource forks while staging the signed app.
+ditto --norsrc --noextattr "$APP" "$STAGE/PhotoCraft.app"
 ln -s /Applications "$STAGE/Applications"
 # Finder window layout: background, icon size and positions (packaging/macos/dmg/README.md).
 mkdir -p "$STAGE/.background"

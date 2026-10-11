@@ -104,8 +104,9 @@ jobs:
           CRAFT_FONTS_REQUIRED: "1"
         run: packaging/macos/package.sh --arch universal
       # Unpacks the CLI zip and checks the binary users get: Developer ID, hardened runtime,
-      # timestamp, and Gatekeeper's notarization lookup (codesign --verify, spctl). Also the DMG's
-      # stapled ticket. Strict when the signing secrets are present, warnings otherwise.
+      # timestamp, and Gatekeeper's notarization lookup (codesign --verify, spctl). Also mounts
+      # the final DMG to verify its app's strict signature and app/DMG stapled tickets.
+      # Signature integrity is mandatory even without signing secrets.
       - name: Verify signatures and notarization
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}

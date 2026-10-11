@@ -78,7 +78,16 @@ for f in "$DMG" "$CLI_ZIP"; do
 done
 
 WORK="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/photocraft-verify.XXXXXX")"
-trap 'rm -rf "$WORK"' EXIT
+MOUNT="$WORK/dmg"
+MOUNTED=0
+cleanup() {
+  # Detach even when a signature check fails; do not leave a mounted release image in CI.
+  if [ "$MOUNTED" = 1 ]; then
+    hdiutil detach "$MOUNT" || hdiutil detach -force "$MOUNT" || return 1
+  fi
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 # ---- CLI zip -----------------------------------------------------------------------------------
 echo "==> $(basename "$CLI_ZIP")"
@@ -125,7 +134,20 @@ fi
 # ---- DMG ---------------------------------------------------------------------------------------
 echo "==> $(basename "$DMG")"
 codesign --verify --strict --verbose=2 "$DMG"
+# The container's signature says nothing about the app inside it. Check the shipped
+# bundle without modifying it, including metadata introduced by DMG construction.
+mkdir -p "$MOUNT"
+hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT" "$DMG"
+MOUNTED=1
+APP="$MOUNT/PhotoCraft.app"
+if [ ! -d "$APP" ]; then
+  echo "error: $(basename "$DMG") has no PhotoCraft.app" >&2
+  exit 1
+fi
+codesign --verify --strict --deep --verbose=2 "$APP"
 if [ "$STRICT" = 1 ]; then
+  xcrun stapler validate "$APP" || fail "no notarization ticket stapled to PhotoCraft.app"
+  assess --assess --type execute -vv "$APP" || fail "Gatekeeper rejects PhotoCraft.app"
   xcrun stapler validate "$DMG" || fail "no notarization ticket stapled to the DMG"
   assess --assess --type open --context context:primary-signature -vv "$DMG" \
     || fail "Gatekeeper rejects the DMG"
@@ -137,7 +159,7 @@ if [ "$FAILED" != 0 ]; then
 fi
 
 if [ "$STRICT" = 1 ]; then
-  result="signed (Developer ID, hardened runtime), notarized; DMG stapled"
+  result="signed (Developer ID, hardened runtime), notarized; app and DMG stapled; bundled app signature intact"
 else
   result="signature intact; Developer ID and notarization not required (no signing secrets)"
 fi
